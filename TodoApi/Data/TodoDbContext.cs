@@ -17,7 +17,7 @@ namespace TodoApi.Data;
 // }
 public sealed class TodoDbContext(DbContextOptions<TodoDbContext> options) : DbContext(options)
 {
-    public DbSet<Todo> todos => Set<Todo>();
+    public DbSet<Todo> Todos => Set<Todo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

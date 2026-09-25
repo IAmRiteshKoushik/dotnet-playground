@@ -11,9 +11,11 @@ var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapGet("/todos", async (TodoDbContext db, CancellationToken ct) =>
+app.MapGet("/todos", async (
+      TodoDbContext db,
+      CancellationToken ct) =>
 {
-    var todos = await db.todos
+    var todos = await db.Todos
     .AsNoTracking()
     .OrderBy(todo => todo.Id)
     .Select(todo => new TodoResponse(todo.Id, todo.Title, todo.IsComplete))
@@ -22,9 +24,12 @@ app.MapGet("/todos", async (TodoDbContext db, CancellationToken ct) =>
     return Results.Ok(todos);
 });
 
-app.MapGet("/todos/{id:int}", async (int id, TodoDbContext db, CancellationToken ct) =>
+app.MapGet("/todos/{id:int}", async (
+      int id,
+      TodoDbContext db,
+      CancellationToken ct) =>
 {
-    var todo = await db.todos
+    var todo = await db.Todos
     .AsNoTracking()
     .Where(todo => todo.Id == id)
     .Select(todo => new TodoResponse(todo.Id, todo.Title, todo.IsComplete))
@@ -33,7 +38,10 @@ app.MapGet("/todos/{id:int}", async (int id, TodoDbContext db, CancellationToken
     return todo is null ? Results.NotFound() : Results.Ok(todo);
 });
 
-app.MapPost("/todos", async (CreateTodoRequest request, TodoDbContext db, CancellationToken ct) =>
+app.MapPost("/todos", async (
+      CreateTodoRequest request,
+      TodoDbContext db,
+      CancellationToken ct) =>
 {
     var title = request.Title.Trim();
     if (string.IsNullOrWhiteSpace(title))
@@ -45,20 +53,24 @@ app.MapPost("/todos", async (CreateTodoRequest request, TodoDbContext db, Cancel
     }
 
     var todo = new Todo { Title = title };
-    db.todos.Add(todo);
+    db.Todos.Add(todo);
     await db.SaveChangesAsync(ct);
 
     return Results.Created($"/todos/{todo.Id}", new TodoResponse(todo.Id, todo.Title, todo.IsComplete));
 });
 
-app.MapPut("/todos/{id:int}", async (int id, UpdateTodoRequest request, TodoDbContext db, CancellationToken ct) =>
+app.MapPut("/todos/{id:int}", async (
+      int id,
+      UpdateTodoRequest request,
+      TodoDbContext db,
+      CancellationToken ct) =>
 {
     // SingleOrDefaultAsync() means to fetch a single row from the DB. If there are
     // no rows, then return null. However, if there are more than one rows, then
     // throw an exception. `ct` is the default cancellation token injected by
     // the HTTP call so that the DB operation can be aborted if the request is
     // aborted.
-    var todo = await db.todos.SingleOrDefaultAsync(todo => todo.Id == id, ct);
+    var todo = await db.Todos.SingleOrDefaultAsync(todo => todo.Id == id, ct);
     if (todo is null)
     {
         return Results.NotFound();
@@ -80,9 +92,12 @@ app.MapPut("/todos/{id:int}", async (int id, UpdateTodoRequest request, TodoDbCo
     return Results.Ok(new TodoResponse(todo.Id, todo.Title, todo.IsComplete));
 });
 
-app.MapDelete("/todos/{id:int}", async (int id, TodoDbContext db, CancellationToken ct) =>
+app.MapDelete("/todos/{id:int}", async (
+      int id,
+      TodoDbContext db,
+      CancellationToken ct) =>
 {
-    var todo = await db.todos.SingleOrDefaultAsync(ct);
+    var todo = await db.Todos.SingleOrDefaultAsync(ct);
     if (todo is null)
     {
         return Results.NotFound();
@@ -91,7 +106,7 @@ app.MapDelete("/todos/{id:int}", async (int id, TodoDbContext db, CancellationTo
     // This pattern is called change-tracking in EFCore. Change-tracking stays 
     // limited to the DbContext and then once SaveChangesAsync() is called then 
     // all the changes are flushed to the DB in a single go.
-    db.todos.Remove(todo);
+    db.Todos.Remove(todo);
     await db.SaveChangesAsync(ct);
 
     return Results.NoContent();
