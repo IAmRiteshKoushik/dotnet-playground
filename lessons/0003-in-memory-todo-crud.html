@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lesson 3: In-memory Todo CRUD</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Lesson 3 · 30 minutes</p><h1>Build a complete Todo API vertical slice.</h1>
+<p class="lede">The routes work. Now give them a resource, request DTOs, predictable status codes, and a store. We will preserve this HTTP contract when PostgreSQL replaces the in-memory state.</p>
+<div class="callout"><strong>Mission connection:</strong> after this, the interesting change is not “how do routes work?” but “how does an async database-backed handler preserve the same contract?”</div>
+<h2>1. Replace <code>Program.cs</code></h2>
+<p>Stop the current server with <code>Ctrl+C</code>, then replace the file with this. It is all in one file on purpose: first learn the moving parts, then organize them.</p>
+<pre><code>using System.Collections.Concurrent;
+
+var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+var todos = new ConcurrentDictionary&lt;int, Todo&gt;();
+var nextId = 0;
+
+app.MapGet("/health", () =&gt; Results.Ok(new { status = "ok" }));
+
+app.MapGet("/todos", () =&gt;
+    Results.Ok(todos.Values.OrderBy(todo =&gt; todo.Id)));
+
+app.MapGet("/todos/{id:int}", (int id) =&gt;
+    todos.TryGetValue(id, out var todo)
+        ? Results.Ok(todo)
+        : Results.NotFound());
+
+app.MapPost("/todos", (CreateTodoRequest request) =&gt;
+{
+    var title = request.Title.Trim();
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        return Results.ValidationProblem(new Dictionary&lt;string, string[]&gt;
+        {
+            ["title"] = ["Title cannot be blank."]
+        });
+    }
+
+    var todo = new Todo(Interlocked.Increment(ref nextId), title, false);
+    todos[todo.Id] = todo;
+
+    return Results.Created($"/todos/{todo.Id}", todo);
+});
+
+app.MapPut("/todos/{id:int}", (int id, UpdateTodoRequest request) =&gt;
+{
+    if (!todos.TryGetValue(id, out var existing))
+    {
+        return Results.NotFound();
+    }
+
+    var title = request.Title.Trim();
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        return Results.ValidationProblem(new Dictionary&lt;string, string[]&gt;
+        {
+            ["title"] = ["Title cannot be blank."]
+        });
+    }
+
+    var updated = existing with { Title = title, IsComplete = request.IsComplete };
+    todos[id] = updated;
+
+    return Results.Ok(updated);
+});
+
+app.MapDelete("/todos/{id:int}", (int id) =&gt;
+    todos.TryRemove(id, out _)
+        ? Results.NoContent()
+        : Results.NotFound());
+
+app.Run();
+
+public record Todo(int Id, string Title, bool IsComplete);
+public record CreateTodoRequest(string Title);
+public record UpdateTodoRequest(string Title, bool IsComplete);</code></pre>
+<h2>2. Read the five new ideas</h2>
+<table><thead><tr><th>C# / ASP.NET Core</th><th>What it does</th><th>Go-shaped mental model</th></tr></thead><tbody>
+<tr><td><code>record</code></td><td>A compact immutable data type with value equality.</td><td>A DTO struct, but with generated value semantics.</td></tr>
+<tr><td><code>CreateTodoRequest request</code></td><td>Binds the JSON body to a typed object.</td><td>Like decoding into a request struct, supplied to the handler.</td></tr>
+<tr><td><code>{id:int}</code></td><td>Requires the path segment to parse as an integer.</td><td>Router constraint plus typed path parsing.</td></tr>
+<tr><td><code>existing with { ... }</code></td><td>Copies a record while changing named properties.</td><td>Create an updated value rather than mutate the old one.</td></tr>
+<tr><td><code>ConcurrentDictionary</code> + <code>Interlocked</code></td><td>Safe shared in-memory map and ID increment.</td><td>A safer teaching substitute for a map plus mutex/counter.</td></tr>
+</tbody></table>
+<p><strong>Why not <code>List&lt;Todo&gt;</code>?</strong> ASP.NET Core handles requests concurrently. A plain mutable list would smuggle a race into the first API you build. This store is only for learning: restart the server and all data disappears.</p>
+<h2>3. Exercise: prove the contract</h2>
+<p>Run <code>dotnet run</code> in <code>TodoApi</code>, keeping your reported port if it remains <code>5229</code>. Then run these in a second terminal:</p>
+<pre><code>curl -i -X POST http://localhost:5229/todos \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Learn Minimal APIs"}'
+
+curl -i http://localhost:5229/todos
+
+curl -i -X PUT http://localhost:5229/todos/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Learn Minimal APIs","isComplete":true}'
+
+curl -i -X DELETE http://localhost:5229/todos/1
+
+curl -i http://localhost:5229/todos/1</code></pre>
+<p>You should observe, in order: <code>201 Created</code>, <code>200 OK</code>, <code>200 OK</code>, <code>204 No Content</code>, then <code>404 Not Found</code>. Use the <a href="../reference/todo-api-contract.html">Todo API contract</a> as the authoritative expected behavior.</p>
+<h2>Retrieval check</h2>
+<p>Which HTTP success status means “created a resource”?</p>
+<input id="answer" aria-label="Answer"><button id="check">Check</button><p id="feedback" class="feedback" aria-live="polite"></p>
+<p>Primary reading: <a href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/route-handlers?view=aspnetcore-10.0">Microsoft: Minimal API route handlers</a>. Ask me if one of the result types or body-binding behaviors feels surprising; those questions are more useful than memorizing the template.</p>
+<div class="next"><strong>Next:</strong> send the five response status lines and the retrieval answer. Then we will translate this exact resource contract to PostgreSQL using EF Core and Npgsql, including the first migration.</div>
+</main><script type="module">import { exactQuiz } from "../assets/quiz.js"; exactQuiz({ inputId: "answer", buttonId: "check", feedbackId: "feedback", answer: "201", success: "Correct. 201 Created is the creation response.", retry: "Use the numeric status code returned by POST /todos." });</script></body></html>

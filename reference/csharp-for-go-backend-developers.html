@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>C# for Go backend developers</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Quick reference</p><h1>C# for Go backend developers</h1>
+<table><thead><tr><th>Go</th><th>C# / .NET</th><th>Practical implication</th></tr></thead><tbody>
+<tr><td><code>package main; func main()</code></td><td>Top-level statements or <code>static void Main</code></td><td>Modern project templates commonly omit the ceremony.</td></tr>
+<tr><td><code>:=</code></td><td><code>var</code> for inferred local type</td><td>The type is still fixed at compile time; it is not dynamic typing.</td></tr>
+<tr><td><code>struct</code></td><td><code>class</code> (reference) or <code>struct</code> (value)</td><td>Default to a class; use value types intentionally.</td></tr>
+<tr><td><code>(value, error)</code></td><td>return value or throw an exception</td><td>Handle expected absence explicitly; use exceptions for failures.</td></tr>
+<tr><td><code>context.Context</code></td><td><code>CancellationToken</code></td><td>Accept and pass it through I/O-bound async operations.</td></tr>
+<tr><td><code>goroutine</code></td><td><code>async</code>/<code>await</code></td><td><code>await</code> yields while I/O is pending; it does not create a thread per request.</td></tr>
+<tr><td><code>interface{}</code> satisfied implicitly</td><td>interfaces implemented explicitly</td><td>A type names the interface in its declaration.</td></tr>
+<tr><td><code>go.mod</code></td><td><code>.csproj</code> + NuGet</td><td><code>dotnet add package</code> records a package dependency.</td></tr>
+</tbody></table>
+<div class="callout"><strong>First vocabulary:</strong> C# is the language; .NET is the runtime, base libraries, SDK, and app frameworks; ASP.NET Core is the web framework; NuGet is the package ecosystem.</div>
+</main></body></html>

@@ -1,0 +1,19 @@
+# .NET build artifacts
+**/[Bb]in/
+**/[Oo]bj/
+
+# IDE / user-specific state
+.vs/
+.idea/
+*.user
+*.suo
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local file databases, if you add one later
+*.db
+*.db-shm
+*.db-wal

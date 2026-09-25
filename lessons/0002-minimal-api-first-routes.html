@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lesson 2: Your first Minimal API</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Lesson 2 · 20 minutes</p><h1>Turn C# into an HTTP server.</h1>
+<p class="lede">You already know HTTP. The new material is ASP.NET Core’s compact route-to-handler model and how dependency setup becomes an application pipeline.</p>
+<div class="callout"><strong>Mission connection:</strong> this is the shell we will later connect to PostgreSQL. For now, make two routes you can call with <code>curl</code>.</div>
+<h2>1. Create the API project</h2>
+<pre><code>cd /home/rk/dev/dotnet-playground/api
+dotnet new web -n TodoApi
+cd TodoApi
+dotnet run</code></pre>
+<p>The terminal prints listening URLs. Keep this process running and use the <code>http://localhost:…</code> URL it reports; use HTTP for this first local exercise.</p>
+<h2>2. Read the template as a lifecycle</h2>
+<pre><code>var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+app.MapGet("/", () =&gt; "Hello World!");
+
+app.Run();</code></pre>
+<table><thead><tr><th>Line</th><th>Job</th><th>Go comparison</th></tr></thead><tbody>
+<tr><td><code>CreateBuilder</code></td><td>Collect configuration, logging, and dependency registrations.</td><td>Constructing application dependencies before starting the server.</td></tr>
+<tr><td><code>Build</code></td><td>Produces the application and its request pipeline.</td><td>Assembling a router plus middleware chain.</td></tr>
+<tr><td><code>MapGet</code></td><td>Matches <code>GET</code> requests and invokes a handler.</td><td><code>mux.HandleFunc</code>, with request binding handled by the framework.</td></tr>
+<tr><td><code>Run</code></td><td>Starts Kestrel and blocks until shutdown.</td><td><code>http.ListenAndServe</code>.</td></tr>
+</tbody></table>
+<h2>3. Replace the route with two routes</h2>
+<p>Replace the template’s single <code>MapGet</code> line with:</p>
+<pre><code>app.MapGet("/health", () =&gt; Results.Ok(new { status = "ok" }));
+
+app.MapGet("/greet/{name}", (string name) =&gt;
+    Results.Ok(new { message = $"Hello, {name}!" }));</code></pre>
+<p>The anonymous objects become JSON. The <code>name</code> parameter binds from <code>{name}</code> in the route template. This is convention plus type information—not reflection magic you need to wire by hand.</p>
+<h2>4. Exercise: verify the HTTP contract</h2>
+<p>Use the actual port reported by <code>dotnet run</code>:</p>
+<pre><code>curl -i http://localhost:PORT/health
+curl -i http://localhost:PORT/greet/Ada</code></pre>
+<p>Expected bodies:</p>
+<pre><code>{"status":"ok"}
+{"message":"Hello, Ada!"}</code></pre>
+<div class="card"><strong>Important:</strong> endpoint handlers may be synchronous like these, or <code>async</code> and return <code>Task&lt;IResult&gt;</code>. We will use that shape when database I/O arrives. Do not make a handler async just because it can be.</div>
+<h2>Retrieval check</h2>
+<p>Which method starts Kestrel and keeps the application running?</p>
+<input id="answer" aria-label="Answer"><button id="check">Check</button><p id="feedback" class="feedback" aria-live="polite"></p>
+<p>Primary reading: <a href="https://learn.microsoft.com/en-us/aspnet/core/tutorials/min-web-api?view=aspnetcore-10.0">Microsoft: Create a Minimal API with ASP.NET Core</a>. For a quick reset on language syntax, revisit <a href="0001-csharp-in-15-minutes.html">Lesson 1</a> and the <a href="../reference/csharp-for-go-backend-developers.html">Go-to-C# reference</a>.</p>
+<div class="next"><strong>Next:</strong> reply with the two <code>curl</code> status lines and bodies, plus the retrieval-check answer. Then we will add in-memory Todo CRUD and use async only where it earns its keep. Ask me about any template line that feels opaque.</div>
+</main><script type="module">import { exactQuiz } from "../assets/quiz.js"; exactQuiz({ inputId: "answer", buttonId: "check", feedbackId: "feedback", answer: "Run", success: "Correct. app.Run() starts the server and keeps it running.", retry: "Not yet. It is the final template call that starts the server." });</script></body></html>

@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EF Core request lifecycle</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Quick reference</p><h1>EF Core in one API request</h1>
+<table><thead><tr><th>Step</th><th>Code shape</th><th>Reason</th></tr></thead><tbody>
+<tr><td>1. Construct context</td><td><code>AddDbContext&lt;TodoDbContext&gt;(...)</code></td><td>ASP.NET Core creates one scoped context per request.</td></tr>
+<tr><td>2. Read</td><td><code>db.Todos.AsNoTracking()</code></td><td>Query without tracking when the result will not be edited.</td></tr>
+<tr><td>3. Create/update/delete</td><td><code>db.Todos.Add(...)</code>, mutate tracked entity, or <code>Remove(...)</code></td><td>Describe intended persistence changes.</td></tr>
+<tr><td>4. Commit</td><td><code>await db.SaveChangesAsync(ct)</code></td><td>Execute the pending SQL changes, respecting request cancellation.</td></tr>
+<tr><td>5. Respond</td><td><code>Results.Created</code>, <code>Results.Ok</code>, etc.</td><td>Keep the HTTP contract independent from the storage mechanism.</td></tr>
+</tbody></table>
+<div class="callout"><strong>Boundary:</strong> the EF entity is a mutable <code>class</code> used by the ORM. The request/response shapes are immutable <code>record</code>s. Do not expose the persistence entity as your permanent public API by accident.</div>
+</main></body></html>

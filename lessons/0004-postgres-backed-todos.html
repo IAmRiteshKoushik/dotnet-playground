@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lesson 4: PostgreSQL-backed Todos</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Lesson 4 · 45 minutes</p><h1>Replace the dictionary, preserve the API.</h1>
+<p class="lede">Your HTTP contract is finished. This lesson changes only the storage boundary: PostgreSQL is the source of truth, EF Core translates typed queries into SQL, and migrations make schema changes reviewable.</p>
+<div class="callout"><strong>Mission connection:</strong> this is the first complete .NET/C# API with a real relational database. The goal is a clear vertical slice, not an ORM survey.</div>
+<h2>1. Start a disposable local PostgreSQL</h2>
+<p>Docker is installed in this workspace, but Docker Compose is not. Run this once:</p>
+<pre><code>docker run --name todo-postgres \
+  -e POSTGRES_USER=todouser \
+  -e POSTGRES_PASSWORD=todopass \
+  -e POSTGRES_DB=tododb \
+  -p 5432:5432 \
+  -d postgres:16</code></pre>
+<p>Wait until it accepts connections:</p>
+<pre><code>docker logs -f todo-postgres
+# Stop following when you see: database system is ready to accept connections</code></pre>
+<p>This password is intentionally local and disposable. Do not put real credentials in source control.</p>
+<h2>2. Add the provider and migration tools</h2>
+<pre><code>cd /home/rk/dev/dotnet-playground/TodoApi
+dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL --version 10.0.0
+dotnet add package Microsoft.EntityFrameworkCore.Design --version 10.0.0
+dotnet tool install --global dotnet-ef --version 10.0.0</code></pre>
+<p>Npgsql 10 is the EF Core 10 PostgreSQL provider. The Design package and <code>dotnet-ef</code> are needed to generate migrations.</p>
+<h2>3. Create the persistence types</h2>
+<p>Create <code>Data/Todo.cs</code>:</p>
+<pre><code>namespace TodoApi.Data;
+
+public sealed class Todo
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public bool IsComplete { get; set; }
+}</code></pre>
+<p>Create <code>Data/TodoDbContext.cs</code>:</p>
+<pre><code>using Microsoft.EntityFrameworkCore;
+
+namespace TodoApi.Data;
+
+public sealed class TodoDbContext(DbContextOptions&lt;TodoDbContext&gt; options)
+    : DbContext(options)
+{
+    public DbSet&lt;Todo&gt; Todos =&gt; Set&lt;Todo&gt;();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity&lt;Todo&gt;(entity =&gt;
+        {
+            entity.ToTable("todos");
+            entity.HasKey(todo =&gt; todo.Id);
+            entity.Property(todo =&gt; todo.Title).HasMaxLength(200);
+        });
+    }
+}</code></pre>
+<p><strong>Why a class now?</strong> EF Core tracks entity instances and treats object identity as significant. Keep the database entity a mutable class; keep the HTTP DTOs below as records. That is the useful boundary—not a rule that records are bad.</p>
+<h2>4. Replace <code>Program.cs</code></h2>
+<pre><code>using Microsoft.EntityFrameworkCore;
+using TodoApi.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Postgres")
+    ?? throw new InvalidOperationException("Connection string 'Postgres' is missing.");
+
+builder.Services.AddDbContext&lt;TodoDbContext&gt;(options =&gt;
+    options.UseNpgsql(connectionString));
+
+var app = builder.Build();
+
+app.MapGet("/health", () =&gt; Results.Ok(new { status = "ok" }));
+
+app.MapGet("/todos", async (TodoDbContext db, CancellationToken ct) =&gt;
+{
+    var todos = await db.Todos
+        .AsNoTracking()
+        .OrderBy(todo =&gt; todo.Id)
+        .Select(todo =&gt; new TodoResponse(todo.Id, todo.Title, todo.IsComplete))
+        .ToListAsync(ct);
+
+    return Results.Ok(todos);
+});
+
+app.MapGet("/todos/{id:int}", async (int id, TodoDbContext db, CancellationToken ct) =&gt;
+{
+    var todo = await db.Todos
+        .AsNoTracking()
+        .Where(todo =&gt; todo.Id == id)
+        .Select(todo =&gt; new TodoResponse(todo.Id, todo.Title, todo.IsComplete))
+        .SingleOrDefaultAsync(ct);
+
+    return todo is null ? Results.NotFound() : Results.Ok(todo);
+});
+
+app.MapPost("/todos", async (CreateTodoRequest request, TodoDbContext db, CancellationToken ct) =&gt;
+{
+    var title = request.Title.Trim();
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        return Results.ValidationProblem(new Dictionary&lt;string, string[]&gt;
+        {
+            ["title"] = ["Title cannot be blank."]
+        });
+    }
+
+    var todo = new Todo { Title = title };
+    db.Todos.Add(todo);
+    await db.SaveChangesAsync(ct);
+
+    return Results.Created($"/todos/{todo.Id}", new TodoResponse(todo.Id, todo.Title, todo.IsComplete));
+});
+
+app.MapPut("/todos/{id:int}", async (int id, UpdateTodoRequest request, TodoDbContext db, CancellationToken ct) =&gt;
+{
+    var todo = await db.Todos.SingleOrDefaultAsync(todo =&gt; todo.Id == id, ct);
+    if (todo is null)
+    {
+        return Results.NotFound();
+    }
+
+    var title = request.Title.Trim();
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        return Results.ValidationProblem(new Dictionary&lt;string, string[]&gt;
+        {
+            ["title"] = ["Title cannot be blank."]
+        });
+    }
+
+    todo.Title = title;
+    todo.IsComplete = request.IsComplete;
+    await db.SaveChangesAsync(ct);
+
+    return Results.Ok(new TodoResponse(todo.Id, todo.Title, todo.IsComplete));
+});
+
+app.MapDelete("/todos/{id:int}", async (int id, TodoDbContext db, CancellationToken ct) =&gt;
+{
+    var todo = await db.Todos.SingleOrDefaultAsync(todo =&gt; todo.Id == id, ct);
+    if (todo is null)
+    {
+        return Results.NotFound();
+    }
+
+    db.Todos.Remove(todo);
+    await db.SaveChangesAsync(ct);
+
+    return Results.NoContent();
+});
+
+app.Run();
+
+public record CreateTodoRequest(string Title);
+public record UpdateTodoRequest(string Title, bool IsComplete);
+public record TodoResponse(int Id, string Title, bool IsComplete);</code></pre>
+<h2>5. Generate, inspect, then apply the migration</h2>
+<p>Set the local connection string only in your shell, so it is not written into the repository:</p>
+<pre><code>export ConnectionStrings__Postgres='Host=localhost;Port=5432;Database=tododb;Username=todouser;Password=todopass'
+
+dotnet ef migrations add InitialCreate</code></pre>
+<p>Open the generated file under <code>Migrations/</code>. It should create a <code>todos</code> table with an integer identity ID, a title limited to 200 characters, and a boolean completion flag. Read it before continuing.</p>
+<pre><code>dotnet ef database update
+
+psql 'postgresql://todouser:todopass@localhost:5432/tododb' \
+  -c '\\d todos'</code></pre>
+<p><code>database update</code> changes database state. It is suitable for this disposable local database; production migrations are reviewed and applied by deployment tooling, not opportunistically at application start.</p>
+<h2>6. Prove persistence</h2>
+<pre><code>dotnet run
+# In a second terminal:
+curl -i -X POST http://localhost:5229/todos \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Persist a Todo"}'
+
+# Stop the API with Ctrl+C, run `dotnet run` again, then:
+curl -i http://localhost:5229/todos</code></pre>
+<p>The Todo must survive the API restart. That is the behavioral difference from the <code>ConcurrentDictionary</code>.</p>
+<h2>Retrieval check</h2>
+<p>Which call executes EF Core's pending insert, update, or delete against PostgreSQL?</p>
+<input id="answer" aria-label="Answer"><button id="check">Check</button><p id="feedback" class="feedback" aria-live="polite"></p>
+<p>Primary reading: <a href="https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/">Microsoft: EF Core migrations overview</a>. Keep the <a href="../reference/ef-core-request-lifecycle.html">EF Core request lifecycle</a> nearby while you work. Ask me before applying a migration if the generated schema differs from the expected table.</p>
+<div class="next"><strong>Next:</strong> send the migration’s <code>Up</code> method (or a screenshot) before running <code>dotnet ef database update</code>. After it is applied, we will verify the API and database state together.</div>
+</main><script type="module">import { exactQuiz } from "../assets/quiz.js"; exactQuiz({ inputId: "answer", buttonId: "check", feedbackId: "feedback", answer: "SaveChangesAsync", success: "Correct. SaveChangesAsync sends the tracked changes to the database.", retry: "Look at the create, update, and delete handlers: they share one commit call." });</script></body></html>

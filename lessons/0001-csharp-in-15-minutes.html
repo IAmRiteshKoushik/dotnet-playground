@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lesson 1: C# in 15 minutes</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Lesson 1 · 15 minutes</p><h1>Write a small C# program, not a framework.</h1>
+<p class="lede">Your Go backend experience already transfers. Today’s win is to recognize the handful of C# choices you will meet in every ASP.NET Core API: types, nullability, classes, and asynchronous I/O.</p>
+<div class="callout"><strong>Mission connection:</strong> this is the minimum language you need before we make HTTP routes and persist a record in PostgreSQL.</div>
+<h2>1. Create and run a console app</h2>
+<pre><code>cd basics
+dotnet new console -n CSharpBasics
+cd CSharpBasics
+dotnet run</code></pre>
+<p>This creates a project (roughly Go’s module plus build configuration) and compiles/runs it. The workspace already has .NET SDK 10 installed.</p>
+<h2>2. Replace <code>Program.cs</code></h2>
+<pre><code>var user = new User("Ada", "ada@example.com");
+
+Console.WriteLine(user.Greeting());
+
+public sealed class User(string name, string? email)
+{
+    public string Name { get; } = name;
+    public string? Email { get; } = email;
+
+    public string Greeting() =&gt; $"Hello, {Name}";
+}</code></pre>
+<p>Expected output: <code>Hello, Ada</code>.</p>
+<table><thead><tr><th>Syntax</th><th>Meaning</th><th>Go translation</th></tr></thead><tbody>
+<tr><td><code>var</code></td><td>Compiler infers the local type.</td><td>Like <code>:=</code>, but the resulting type stays fixed.</td></tr>
+<tr><td><code>string?</code></td><td>A nullable reference: it may contain <code>null</code>.</td><td>Closest in intent to an optional pointer, checked by tooling/compiler analysis.</td></tr>
+<tr><td><code>new User(...)</code></td><td>Construct an object.</td><td>Like allocating/initializing a struct, but <code>class</code> is a reference type.</td></tr>
+<tr><td><code>public string Name { get; }</code></td><td>Read-only property.</td><td>An exported field with controlled access; a common C# API surface.</td></tr>
+<tr><td><code>=&gt;</code></td><td>Expression-bodied member.</td><td>Compact one-expression function body.</td></tr>
+</tbody></table>
+<h2>3. One deliberate modification</h2>
+<p>Add an <code>IsContactable</code> read-only property that is true when <code>Email</code> is not null, then print it. Do not look up syntax first; use compiler feedback as the loop.</p>
+<details class="card"><summary>Check only after trying</summary><pre><code>public bool IsContactable =&gt; Email is not null;
+
+Console.WriteLine(user.IsContactable);</code></pre></details>
+<h2>4. The async shape you will use in the API</h2>
+<pre><code>static async Task&lt;User?&gt; FindUserAsync(string email, CancellationToken cancellationToken)
+{
+    await Task.Delay(10, cancellationToken); // stand-in for database I/O
+    return email == "ada@example.com" ? new User("Ada", email) : null;
+}</code></pre>
+<p>Think of <code>Task&lt;T&gt;</code> as “a future result of type T”. Unlike a goroutine, <code>async</code>/<code>await</code> principally gives a non-blocking composition model for I/O. In web handlers, accept and pass a <code>CancellationToken</code> to database calls.</p>
+<h2>Retrieval check</h2>
+<p>Which C# type annotation says a reference may be <code>null</code>?</p>
+<input id="answer" aria-label="Answer"><button id="check">Check</button><p id="feedback" class="feedback" aria-live="polite"></p>
+<p>Primary reading: <a href="https://learn.microsoft.com/dotnet/csharp/tour-of-csharp/">Microsoft’s A tour of C#</a>. Keep the <a href="../reference/csharp-for-go-backend-developers.html">Go-to-C# reference</a> open while coding.</p>
+<div class="next"><strong>Next:</strong> reply with the output of <code>dotnet run</code> and your answer to the retrieval check. Then we’ll make a Minimal API with two routes and deliberately trace what the template does. Ask me anything that feels unidiomatic; that is exactly the useful friction.</div>
+</main><script type="module">import { exactQuiz } from "../assets/quiz.js"; exactQuiz({ inputId: "answer", buttonId: "check", feedbackId: "feedback", answer: "string?", success: "Correct. string? declares a nullable string reference.", retry: "Not yet. Look at the declaration of Email and try the exact annotation." });</script></body></html>

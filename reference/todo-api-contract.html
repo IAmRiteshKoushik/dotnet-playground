@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Todo API contract</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Quick reference</p><h1>In-memory Todo API contract</h1>
+<table><thead><tr><th>Request</th><th>Success</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>GET /todos</code></td><td><code>200</code> + array</td><td>List all todos ordered by ID.</td></tr>
+<tr><td><code>GET /todos/{id}</code></td><td><code>200</code> + todo</td><td>Return one todo; <code>404</code> if absent.</td></tr>
+<tr><td><code>POST /todos</code><br><code>{"title":"…"}</code></td><td><code>201</code> + todo</td><td>Create a todo; <code>400</code> for a blank title.</td></tr>
+<tr><td><code>PUT /todos/{id}</code><br><code>{"title":"…","isComplete":true}</code></td><td><code>200</code> + todo</td><td>Replace the fields in this small API; <code>404</code> if absent.</td></tr>
+<tr><td><code>DELETE /todos/{id}</code></td><td><code>204</code></td><td>Remove the todo; <code>404</code> if absent.</td></tr>
+</tbody></table>
+<div class="callout"><strong>State boundary:</strong> this API's data lives only in process memory. Restarting the server empties it. Its routes and status-code contract will stay useful when the store is replaced with PostgreSQL.</div>
+</main></body></html>
