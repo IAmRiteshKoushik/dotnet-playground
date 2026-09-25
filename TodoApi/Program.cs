@@ -6,8 +6,23 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Postgres") ?? throw new InvalidOperationException("Connection string 'Postgres' is missing.");
 
 builder.Services.AddDbContext<TodoDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+// Global middlewares
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+app.Use(async (HttpContext context, RequestDelegate next) =>
+{
+    context.Response.Headers["X-Request-Id"] = context.TraceIdentifier;
+    await next(context);
+});
+
+app.MapGet("/debug/throw", () =>
+{
+    throw new InvalidOperationException("Intentional teaching error");
+});
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
