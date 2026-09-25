@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lesson 5: Request pipeline and errors</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Lesson 5 · 25 minutes</p><h1>Make the framework behavior you already use visible.</h1>
+<p class="lede">You have a functional API. This final foundation lesson explains why a handler can simply ask for <code>TodoDbContext</code>, where cancellation comes from, and how every request gets consistent error behavior.</p>
+<div class="callout"><strong>Finish line:</strong> after this, stop studying broadly. Build the next feature you care about and look up C#/.NET details as they arise.</div>
+<h2>1. Read your existing handler as framework binding</h2>
+<pre><code>app.MapPost("/todos", async (
+    CreateTodoRequest request,
+    TodoDbContext db,
+    CancellationToken ct) =&gt;
+{
+    // ...
+});</code></pre>
+<p>ASP.NET Core recognizes each parameter by its type and route/body context. It deserializes the request body into <code>request</code>, resolves <code>db</code> from dependency injection, and supplies <code>ct</code> from the active HTTP request. See the <a href="../reference/aspnet-request-shapes.html">request-shape reference</a>.</p>
+<p><code>builder.Services.AddDbContext&lt;TodoDbContext&gt;(...)</code> registers the context as a <em>scoped</em> service: one context per request. Never share a <code>DbContext</code> across concurrent work, and always immediately await EF Core async calls.</p>
+<h2>2. Add consistent error responses</h2>
+<p>Add this before <code>var app = builder.Build();</code>:</p>
+<pre><code>builder.Services.AddProblemDetails();</code></pre>
+<p>Then add this immediately after <code>var app = builder.Build();</code>, before every <code>Map...</code> call:</p>
+<pre><code>app.UseExceptionHandler();
+app.UseStatusCodePages();
+
+app.Use(async (context, next) =&gt;
+{
+    context.Response.Headers["X-Request-Id"] = context.TraceIdentifier;
+    await next(context);
+});</code></pre>
+<table><thead><tr><th>Piece</th><th>Effect</th></tr></thead><tbody>
+<tr><td><code>AddProblemDetails</code></td><td>Registers RFC 7807-style JSON error responses.</td></tr>
+<tr><td><code>UseExceptionHandler</code></td><td>Converts unexpected exceptions from later pipeline stages into a controlled 500 response.</td></tr>
+<tr><td><code>UseStatusCodePages</code></td><td>Produces a problem-details body for otherwise empty 4xx/5xx responses, including route misses.</td></tr>
+<tr><td>Request-ID middleware</td><td>Returns a correlation ID clients can provide when reporting an error.</td></tr>
+</tbody></table>
+<h2>3. Verify the pipeline</h2>
+<p>Restart the API and run:</p>
+<pre><code>curl -i http://localhost:5229/health
+curl -i http://localhost:5229/no-such-route</code></pre>
+<p>Both responses should include <code>X-Request-Id</code>. The unknown route should be a JSON problem-details response with <code>404</code>, not an empty response.</p>
+<h2>4. Exercise: test an unexpected error, then remove the route</h2>
+<p>Temporarily add this endpoint after the middleware:</p>
+<pre><code>app.MapGet("/debug/throw", () =&gt;
+    throw new InvalidOperationException("Intentional teaching error"));</code></pre>
+<p>Call it with:</p>
+<pre><code>curl -i -H 'Accept: application/json' http://localhost:5229/debug/throw</code></pre>
+<p>You should receive <code>500</code> with JSON problem details. Delete the temporary endpoint afterward. Do not expose debug-throw endpoints in a real API.</p>
+<h2>Retrieval check</h2>
+<p>What dependency lifetime does <code>AddDbContext</code> use by default in an ASP.NET Core API?</p>
+<input id="answer" aria-label="Answer"><button id="check">Check</button><p id="feedback" class="feedback" aria-live="polite"></p>
+<p>Primary reading: <a href="https://learn.microsoft.com/en-us/ef/core/dbcontext-configuration/">Microsoft: DbContext lifetime and configuration</a>. For pipeline order and why error handling is early, use <a href="https://learn.microsoft.com/aspnet/core/fundamentals/middleware">Microsoft: ASP.NET Core middleware</a>. Ask follow-up questions whenever the framework’s implicit parameter binding feels magical.</p>
+<div class="next"><strong>After this:</strong> you are done with the planned foundation. Pick a real feature—auth, another resource, pagination, tests, or deployment—and we’ll learn only the next necessary layer.</div>
+</main><script type="module">import { exactQuiz } from "../assets/quiz.js"; exactQuiz({ inputId: "answer", buttonId: "check", feedbackId: "feedback", answer: "scoped", success: "Correct. AddDbContext registers a scoped context by default: one per request.", retry: "Think about the lifetime that matches one HTTP request and one unit of work." });</script></body></html>

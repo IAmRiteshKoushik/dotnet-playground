@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ASP.NET Core request shapes</title><link rel="stylesheet" href="../assets/course.css"></head><body><main>
+<p class="eyebrow">Quick reference</p><h1>How a Todo request gets its dependencies</h1>
+<table><thead><tr><th>Handler parameter</th><th>Provided by</th><th>Lifetime / meaning</th></tr></thead><tbody>
+<tr><td><code>int id</code></td><td>Route binding</td><td>Parsed from <code>/todos/{id:int}</code>.</td></tr>
+<tr><td><code>CreateTodoRequest request</code></td><td>JSON body binding</td><td>Deserialized only for that request.</td></tr>
+<tr><td><code>TodoDbContext db</code></td><td>Dependency injection</td><td>One scoped context per HTTP request; disposed afterwards.</td></tr>
+<tr><td><code>CancellationToken ct</code></td><td>HTTP server</td><td>Cancelled if the client disconnects or the request ends.</td></tr>
+</tbody></table>
+<div class="callout"><strong>Pipeline rule:</strong> middleware runs in declaration order on the way in, and in reverse order on the way out. Exception handling belongs early so it can catch later failures.</div>
+</main></body></html>
